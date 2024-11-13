@@ -21,6 +21,7 @@ export type DefinitionProperty =
           kind: "REFERENCE";
           isArray?: boolean;
           ref: Definition;
+          type:string;
       };
 
 export interface Definition {

@@ -109,7 +109,7 @@ function generateDefinitionFile(
             if (prop.ref.name !== definition.name) {
                 addSafeImport(definitionImports, `./${prop.ref.name}${options.esm ? ".js" : ""}`, prop.ref.name);
             }
-            definitionProperties.push(createProperty(prop.name, prop.ref.name, prop.sourceName, prop.isArray));
+            definitionProperties.push(createProperty(prop.name, `${prop.ref}${prop.type}`, prop.sourceName, prop.isArray));
         }
     }
 

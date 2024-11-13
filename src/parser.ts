@@ -7,6 +7,25 @@ import { stripExtension } from "./utils/file";
 import { reservedKeywords } from "./utils/javascript";
 import { Logger } from "./utils/logger";
 
+function isNillable(json:any,targetName:string){
+    let nillable = false
+
+    function findChild (children:any){
+        for (const child of children){
+            if (child.$name === targetName){
+                return (child.$nillable === "true")
+            }
+            
+            if (child.children && child.children.length > 0){
+                return findChild(child.children)
+            }
+        }
+        return false
+    }
+    findChild(json.element.children)
+    return isNillable;
+}
+
 interface ParserOptions {
     modelNamePreffix: string;
     modelNameSuffix: string;
@@ -67,7 +86,8 @@ function parseDefinition(
     name: string,
     defParts: { [propNameType: string]: any },
     stack: string[],
-    visitedDefs: Array<VisitedDefinition>
+    visitedDefs: Array<VisitedDefinition>,
+    wsdlMessage: any,
 ): Definition {
     const defName = changeCase(name, { pascalCase: true });
 
@@ -104,6 +124,10 @@ function parseDefinition(
             });
         } else {
             Object.entries(defParts).forEach(([propName, type]) => {
+                let nullTag = ''
+                if(isNillable(wsdlMessage,propName)){
+                    nullTag = '|null'
+                }
                 if (propName === "targetNSAlias") {
                     definition.docs.push(`@targetNSAlias \`${type}\``);
                 } else if (propName === "targetNamespace") {
@@ -118,7 +142,7 @@ function parseDefinition(
                             name: stripedPropName,
                             sourceName: propName,
                             description: type,
-                            type: toPrimitiveType(type),
+                            type: toPrimitiveType(type) + nullTag,
                             isArray: true,
                         });
                     } else if (type instanceof ComplexTypeElement) {
@@ -128,7 +152,7 @@ function parseDefinition(
                             name: stripedPropName,
                             sourceName: propName,
                             description: "ComplexType are not supported yet",
-                            type: "any",
+                            type: "any" + nullTag,
                             isArray: true,
                         });
                         Logger.warn(`Cannot parse ComplexType '${stack.join(".")}.${name}' - using 'any' type`);
@@ -143,6 +167,7 @@ function parseDefinition(
                                 sourceName: propName,
                                 ref: visited.definition,
                                 isArray: true,
+                                type:nullTag,
                             });
                         } else {
                             try {
@@ -152,7 +177,8 @@ function parseDefinition(
                                     stripedPropName,
                                     type,
                                     [...stack, propName],
-                                    visitedDefs
+                                    visitedDefs,
+                                    wsdlMessage,
                                 );
                                 definition.properties.push({
                                     kind: "REFERENCE",
@@ -160,6 +186,7 @@ function parseDefinition(
                                     sourceName: propName,
                                     ref: subDefinition,
                                     isArray: true,
+                                    type:nullTag,
                                 });
                             } catch (err) {
                                 const e = new Error(
@@ -176,7 +203,7 @@ function parseDefinition(
                         name: propName,
                         sourceName: propName,
                         description: type,
-                        type: toPrimitiveType(type),
+                        type: toPrimitiveType(type) + nullTag,
                         isArray: false,
                     });
                 } else if (type instanceof ComplexTypeElement) {
@@ -186,7 +213,7 @@ function parseDefinition(
                         name: propName,
                         sourceName: propName,
                         description: "ComplexType are not supported yet",
-                        type: "any",
+                        type: "any" + nullTag,
                         isArray: false,
                     });
                     Logger.warn(`Cannot parse ComplexType '${stack.join(".")}.${name}' - using 'any' type`);
@@ -202,6 +229,7 @@ function parseDefinition(
                             description: "",
                             ref: reference.definition,
                             isArray: false,
+                            type:nullTag,
                         });
                     } else {
                         try {
@@ -211,7 +239,8 @@ function parseDefinition(
                                 propName,
                                 type,
                                 [...stack, propName],
-                                visitedDefs
+                                visitedDefs,
+                                wsdlMessage,
                             );
                             definition.properties.push({
                                 kind: "REFERENCE",
@@ -219,6 +248,7 @@ function parseDefinition(
                                 sourceName: propName,
                                 ref: subDefinition,
                                 isArray: false,
+                                type:nullTag,
                             });
                         } catch (err) {
                             const e = new Error(`Error while parsing Subdefinition for ${stack.join(".")}.${name}`);
@@ -308,7 +338,8 @@ export async function parseWsdl(wsdlPath: string, options: Partial<ParserOptions
                                             typeName,
                                             inputMessage.parts,
                                             [typeName],
-                                            visitedDefinitions
+                                            visitedDefinitions,
+                                            inputMessage,
                                         );
                                 } else if (inputMessage.parts) {
                                     const type = parsedWsdl.findDefinition(requestParamName);
@@ -320,7 +351,8 @@ export async function parseWsdl(wsdlPath: string, options: Partial<ParserOptions
                                             requestParamName,
                                             inputMessage.parts,
                                             [requestParamName],
-                                            visitedDefinitions
+                                            visitedDefinitions,
+                                            inputMessage,
                                         );
                                 } else {
                                     Logger.debug(
@@ -348,7 +380,8 @@ export async function parseWsdl(wsdlPath: string, options: Partial<ParserOptions
                                             typeName,
                                             outputMessage.parts,
                                             [typeName],
-                                            visitedDefinitions
+                                            visitedDefinitions,
+                                            outputMessage,
                                         );
                                 } else {
                                     const type = parsedWsdl.findDefinition(responseParamName);
@@ -360,7 +393,8 @@ export async function parseWsdl(wsdlPath: string, options: Partial<ParserOptions
                                             responseParamName,
                                             outputMessage.parts,
                                             [responseParamName],
-                                            visitedDefinitions
+                                            visitedDefinitions,
+                                            outputMessage,
                                         );
                                 }
                             }
